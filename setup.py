@@ -16,7 +16,7 @@ with open("README.md", "r") as fh:
         long_description = before + after
 
 __pkginfo__ = {}
-with open("s3access/__pkginfo__.py") as fh:
+with open("easypsyco/__pkginfo__.py") as fh:
     exec(fh.read(), __pkginfo__)
 
 setuptools.setup(

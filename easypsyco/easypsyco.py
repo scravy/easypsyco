@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
+from abc import ABC, abstractmethod
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
-from typing import Optional, Callable, Union, Any
+from typing import Optional, Callable, Union, Any, Dict
 
 import psycopg2
 import psycopg2.extras as extras
@@ -88,6 +90,62 @@ class Select:
                 self._cursor = None
 
 
+class SelectMock(Select):
+    def __init__(self, data: Collection[Collection]):
+        # noinspection PyTypeChecker
+        super().__init__(None, "")
+        self._iter = iter(data)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self._iter)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+
+class Queryable(ABC):
+    @abstractmethod
+    def select(self, query, *args, **kwargs) -> Select:
+        raise NotImplementedError
+
+    @abstractmethod
+    def insert(self, table: str, values: Union[Collection[Mapping[str, Any]], Mapping[str, Any]]):
+        raise NotImplementedError
+
+    @abstractmethod
+    def execute(self, sql: str, *args, **kwargs):
+        raise NotImplementedError
+
+    @staticmethod
+    def mock(fakes: Dict[str, Collection[Collection]] = dict()) -> Queryable:
+        return QueryableMock(fakes)
+
+
+class QueryableMock(Queryable):
+    def __init__(self, fakes: Dict[str, Collection[Collection]]):
+        self._fakes = fakes
+
+    def select(self, query, *args, **kwargs) -> Select:
+        for k, v in self._fakes.items():
+            if re.match(k, query):
+                return SelectMock(v)
+        return SelectMock([])
+
+    def insert(self, table: str, values: Union[Collection[Mapping[str, Any]], Mapping[str, Any]]):
+        # don't do anything
+        pass
+
+    def execute(self, sql: str, *args, **kwargs):
+        # don't do anything
+        pass
+
+
 @dataclass
 class Credentials:
     username: str
@@ -104,7 +162,7 @@ class Credentials:
                f" port={self.port}"
 
 
-class Database:
+class Database(Queryable):
     def select(self, query, *args, **kwargs) -> Select:
         return Select(self, query, *args, **kwargs)
 
@@ -139,6 +197,8 @@ class Database:
 
     def __enter__(self) -> Session:
         conn = self._connection_factory()
+        if isinstance(conn, str):
+            conn = psycopg2.connect(conn)
         self._session = Session(conn)
         return self._session
 
@@ -149,8 +209,13 @@ class Database:
         finally:
             self._session = None
 
+    @staticmethod
+    def mock(fakes: Dict[str, Collection[Collection]] = dict()) -> Database:
+        # noinspection PyTypeChecker
+        return QueryableMock.mock(fakes)
 
-class GlobalSession:
+
+class GlobalSession(Queryable):
     __database = None
     __session = None
     __args = []
@@ -177,17 +242,17 @@ class GlobalSession:
 
     @classmethod
     def insert(cls, table: str, values: Union[Collection[Mapping[str, Any]], Mapping[str, Any]]):
-        with cls.get() as transaction:
+        with cls.get() as transaction:  # pylint: disable=E1129
             with transaction.cursor() as cur:
                 insert(cur, table, values)
 
     @classmethod
     def execute(cls, sql: str, *args, **kwargs):
-        with cls.get() as transaction:
+        with cls.get() as transaction:  # pylint: disable=E1129
             transaction.execute(sql, *args, **kwargs)
 
 
-class Session:
+class Session(Queryable):
     def select(self, query, *args, **kwargs) -> Select:
         return Select(self, query, *args, **kwargs)
 
@@ -217,8 +282,13 @@ class Session:
         finally:
             self._transaction = None
 
+    @staticmethod
+    def mock(fakes: Dict[str, Collection[Collection]] = dict()) -> Session:
+        # noinspection PyTypeChecker
+        return QueryableMock.mock(fakes)
 
-class Transaction:
+
+class Transaction(Queryable):
     def cursor(self):
         return self._conn.cursor()
 

@@ -1,4 +1,4 @@
-from .easypsyco import Database, Session, Transaction, GlobalSession, Credentials
+from .easypsyco import Database, Session, Transaction, GlobalSession, Credentials, Queryable
 
 __all__ = [
     'Credentials',
@@ -6,4 +6,5 @@ __all__ = [
     'Session',
     'Transaction',
     'GlobalSession',
+    'Queryable',
 ]

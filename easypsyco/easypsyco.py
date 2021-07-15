@@ -152,7 +152,7 @@ class Credentials:
     password: str
     database: str
     hostname: str = 'localhost'
-    port: str = 5432
+    port: int = 5432
 
     def __str__(self):
         return f"dbname={self.database}" \

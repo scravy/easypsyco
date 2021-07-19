@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import enum
 import logging
 import re
 import uuid
@@ -14,8 +15,16 @@ import psycopg2.extras as extras
 logger = logging.getLogger(__name__)
 
 
+def _serialize_value(value: Any):
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, enum.Enum):
+        return value.value
+    return value
+
+
 def _serialize(dict_: Mapping[str, Any]):
-    return {key: str(value) if isinstance(value, uuid.UUID) else value for key, value in dict_.items()}
+    return {key: _serialize_value(value) for key, value in dict_.items()}
 
 
 def insert(cursor, table: str, values: Union[Collection[Mapping[str, Any]], Mapping[str, Any]]):
